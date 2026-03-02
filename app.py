@@ -6,155 +6,128 @@ import io
 import time
 
 # --- 1. Hugging Face API Config ---
-# Mistral-7B is free and powerful for professional rewriting
 API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.3"
 HF_TOKEN = st.secrets["HF_TOKEN"]
 headers = {"Authorization": f"Bearer {HF_TOKEN}"}
 
-st.set_page_config(page_title="AI Resume Architect", page_icon="📄", layout="wide")
+st.set_page_config(page_title="AI Resume Architect Pro", page_icon="📄", layout="wide")
 
-# --- 2. Professional CSS Styling ---
+# --- 2. Enhanced CSS (Fixing the layout issues) ---
 st.markdown("""
 <style>
-    .stApp { background-color: #f0f4f8; color: #1e3a8a; }
-    .main-title { font-size: 36px; font-weight: 800; text-align: center; color: #1e3a8a; margin-bottom: 10px; }
-    .card { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 20px; border-top: 5px solid #3b82f6; }
+    .stApp { background-color: #f4f7f9; }
     .cv-preview { 
         background: white; 
-        padding: 40px; 
-        border-radius: 5px; 
-        box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        padding: 50px; 
+        border-radius: 2px; 
+        box-shadow: 0 0 15px rgba(0,0,0,0.1);
         color: #333;
-        font-family: 'Helvetica', sans-serif;
-        line-height: 1.6;
+        font-family: 'Garamond', serif;
+        max-width: 850px;
+        margin: auto;
     }
-    .section-header { color: #1e3a8a; border-bottom: 2px solid #3b82f6; padding-bottom: 5px; margin-top: 20px; text-transform: uppercase; letter-spacing: 1px; }
+    .cv-header { border-bottom: 3px solid #1e3a8a; padding-bottom: 10px; margin-bottom: 20px; }
+    .cv-name { font-size: 32px; color: #1e3a8a; font-weight: bold; margin: 0; }
+    .cv-contact { font-size: 14px; color: #555; margin: 5px 0; }
+    .section-title { 
+        font-size: 18px; 
+        color: #1e3a8a; 
+        font-weight: bold; 
+        text-transform: uppercase; 
+        margin-top: 25px; 
+        border-bottom: 1px solid #ddd;
+    }
+    .cv-content { font-size: 15px; line-height: 1.5; margin-top: 8px; white-space: pre-wrap; }
+    .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 15px; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 3. Helper Functions ---
-def humanize_with_hf(text):
-    if not text or len(text) < 10: return text
+# --- 3. Better Humanizer (Mistral Prompt Fix) ---
+def humanize_with_hf(text, section_name):
+    if not text or len(text) < 3: return text
     
-    payload = {
-        "inputs": f"Rewrite the following resume experience to be professional, impactful, and sound 100% written by a human expert. Avoid AI cliches like 'spearheaded' or 'synergy'. Use natural active verbs: {text}",
-        "parameters": {"max_new_tokens": 500, "temperature": 0.7}
-    }
+    # Prompt ko zyada clear kiya hai taake AI dummy text ko bhi handle kare
+    prompt = f"Rewrite this {section_name} for a resume. Make it professional, bulleted, and human-like. Text: {text}"
     
     try:
-        response = requests.post(API_URL, headers=headers, json=payload)
+        response = requests.post(API_URL, headers=headers, json={"inputs": prompt, "parameters": {"max_new_tokens": 300}})
         output = response.json()
         
-        # Check if model is still loading
-        if "error" in output and "loading" in output["error"]:
-            st.warning("Hugging Face model is waking up... retrying in 10s")
-            time.sleep(10)
-            return humanize_with_hf(text)
-            
         if isinstance(output, list):
-            gen_text = output[0].get('generated_text', text)
-            # Remove the prompt from the result
-            return gen_text.split("human expert.")[-1].strip()
+            res = output[0].get('generated_text', text)
+            # Sirf AI ka likha hua part nikalna
+            return res.split(text)[-1].strip() if text in res else res
         return text
     except:
         return text
 
-def get_image_base64(uploaded_file):
-    if uploaded_file is not None:
-        img = Image.open(uploaded_file)
-        # Force resize to keep it professional
+def get_base64(file):
+    if file:
+        img = Image.open(file)
         img.thumbnail((150, 150))
-        buffered = io.BytesIO()
-        img.save(buffered, format="PNG")
-        return base64.b64encode(buffered.getvalue()).decode()
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        return base64.b64encode(buf.getvalue()).decode()
     return None
 
-# --- 4. Main UI Layout ---
-st.markdown("<div class='main-title'>🛡️ AI Resume Architect Pro</div>", unsafe_allow_html=True)
-st.markdown("<p style='text-align:center;'>Professional • Humanized • ATS-Friendly</p>", unsafe_allow_html=True)
+# --- 4. Sidebar/Form UI ---
+st.markdown("<h1 style='text-align:center; color:#1e3a8a;'>🛡️ AI Resume Architect</h1>", unsafe_allow_html=True)
 
-col_form, col_view = st.columns([1, 1.2], gap="large")
+col_in, col_out = st.columns([1, 1.2])
 
-with col_form:
-    st.markdown("### 🛠️ Resume Details")
-    
-    # Personal Info Card
+with col_in:
+    st.subheader("🛠️ Build Your Profile")
     with st.container():
         st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.write("👤 **Personal Information**")
-        name = st.text_input("Full Name", placeholder="e.g., Muhammad Ali")
-        email = st.text_input("Email Address")
-        phone = st.text_input("Phone Number")
-        
-        user_img = st.file_uploader("Profile Picture (Max 1MB)", type=['jpg', 'jpeg', 'png'])
-        if user_img and user_img.size > 1024 * 1024:
-            st.error("Image size too large! Please use a file under 1MB.")
-            user_img = None
+        name = st.text_input("Full Name", "ANA AWAIS AHMAD")
+        email = st.text_input("Email", "awais@example.com")
+        phone = st.text_input("Phone", "+92 300 1234567")
+        pic = st.file_uploader("Photo (Max 1MB)", type=['jpg','png'])
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # Experience & Education Card
     with st.container():
         st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.write("🎓 **Academic & Professional**")
-        edu = st.text_area("Education (Degree, University, Year)", height=100)
-        exp = st.text_area("Work Experience (Raw or Bullet Points)", height=150, placeholder="Explain what you did in simple words...")
+        edu = st.text_area("Education", "BS Computer Science, University Name, 2024")
+        exp = st.text_area("Work Experience", "Worked on web projects and database management.")
+        skills = st.text_input("Skills", "Python, SQL, Communication")
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # Skills & Projects Card
-    with st.container():
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.write("🚀 **Skills & Projects (Optional)**")
-        skills = st.text_input("Skills (Comma separated)", placeholder="Python, Data Analysis, Leadership")
-        projects = st.text_area("Key Projects", height=100)
-        st.markdown("</div>", unsafe_allow_html=True)
+    gen = st.button("🚀 GENERATE PROFESSIONAL CV", use_container_width=True)
 
-    generate_btn = st.button("🚀 GENERATE HUMANIZED RESUME", use_container_width=True)
+# --- 5. CV Generation Logic ---
+with col_out:
+    if gen:
+        with st.spinner("Processing Professional Layout..."):
+            img_code = get_base64(pic)
+            # Section-wise humanizing
+            h_exp = humanize_with_hf(exp, "Work Experience")
+            h_edu = humanize_with_hf(edu, "Education")
 
-# --- 5. CV Generation & Preview ---
-with col_view:
-    st.markdown("### 📄 Professional Preview")
-    
-    if generate_btn and name:
-        with st.spinner("AI is humanizing your content..."):
-            # Process Image
-            img_b64 = get_image_base64(user_img)
-            
-            # Humanize Text using Hugging Face
-            human_exp = humanize_with_hf(exp)
-            human_proj = humanize_with_hf(projects)
-
-            # CV HTML Template
             cv_html = f"""
             <div class="cv-preview">
-                <table style="width:100%; border-collapse: collapse;">
-                    <tr>
-                        <td style="vertical-align: top;">
-                            <h1 style="margin:0; color:#1e3a8a; font-size:28px;">{name.upper()}</h1>
-                            <p style="margin:5px 0; color:#555;">📧 {email} | 📞 {phone}</p>
-                        </td>
-                        <td style="text-align: right; vertical-align: top;">
-                            {f'<img src="data:image/png;base64,{img_b64}" style="width:110px; height:110px; border-radius:50%; border:3px solid #3b82f6; object-fit: cover;">' if img_b64 else ""}
-                        </td>
-                    </tr>
-                </table>
+                <div class="cv-header">
+                    <table style="width:100%;">
+                        <tr>
+                            <td>
+                                <div class="cv-name">{name.upper()}</div>
+                                <div class="cv-contact">📧 {email} | 📞 {phone}</div>
+                            </td>
+                            <td style="text-align:right;">
+                                {f'<img src="data:image/png;base64,{img_code}" style="width:100px; height:100px; border-radius:5px; border:1px solid #ddd;">' if img_code else ""}
+                            </td>
+                        </tr>
+                    </table>
+                </div>
 
-                <h3 class="section-header">Education</h3>
-                <p style="white-space: pre-wrap;">{edu}</p>
+                <div class="section-title">Education</div>
+                <div class="cv-content">{h_edu}</div>
 
-                {f'<h3 class="section-header">Professional Experience</h3><p style="white-space: pre-wrap;">{human_exp}</p>' if exp else ""}
+                {f'<div class="section-title">Professional Experience</div><div class="cv-content">{h_exp}</div>' if exp else ""}
                 
-                {f'<h3 class="section-header">Technical Skills</h3><p>{skills}</p>' if skills else ""}
-                
-                {f'<h3 class="section-header">Key Projects</h3><p style="white-space: pre-wrap;">{human_proj}</p>' if projects else ""}
+                {f'<div class="section-title">Technical Skills</div><div class="cv-content">{skills}</div>' if skills else ""}
             </div>
             """
             st.markdown(cv_html, unsafe_allow_html=True)
-            st.success("✅ Resume Ready! Right-click -> Print -> Save as PDF.")
-            
-    elif generate_btn and not name:
-        st.error("Please enter your name at least!")
+            st.success("✅ Ready! Use 'Print' (Ctrl+P) to save as PDF.")
     else:
-        st.info("Your professional resume will appear here once you click Generate.")
-
-st.write("---")
-st.caption("AI Resume Architect v1.0 | Powered by Hugging Face Mistral-7B | Secure & Humanized")
+        st.info("Preview will appear here.")
