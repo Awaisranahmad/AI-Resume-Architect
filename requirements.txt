@@ -1,6 +1,4 @@
-streamlit
-requests
-Pillow
-python-docx
-fpdf2
-groq                 # <--- Ye add karo
+streamlit cache clear
+pip uninstall streamlit -y
+pip install streamlit==1.42.0   # stable recent version pin kar lo
+streamlit run app.py
