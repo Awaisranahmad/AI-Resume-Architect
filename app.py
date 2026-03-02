@@ -1,106 +1,92 @@
+# app.py - Minimal working version (blank page fix ke liye)
+
 import streamlit as st
-from groq import Groq  # New import
+import io
+from docx import Document
+from docx.shared import Pt
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 
-# --- API Config ---
-HF_API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.3"
-HF_TOKEN = st.secrets.get("HF_TOKEN", "")  # Safe access
+# Page config pehle daalo
+st.set_page_config(page_title="Resume Builder - Test", layout="wide")
 
-# Groq setup
-GROQ_CLIENT = None
-if "GROQ_API_KEY" in st.secrets and st.secrets["GROQ_API_KEY"]:
-    try:
-        GROQ_CLIENT = Groq(api_key=st.secrets["GROQ_API_KEY"])
-    except Exception as e:
-        st.error(f"Groq initialization failed: {e}")
-else:
-    st.warning("Groq API key not found in secrets. Falling back to Hugging Face (slower).")
+# Debug message sabse upar (terminal aur app mein dikhega)
+st.write("App starting... Hello Awais! Yeh line dikhi to UI chal raha hai.")
 
-# --- AI Query Function (Groq preferred) ---
-def query_ai(prompt, model="llama-3.1-70b-versatile", temperature=0.75, max_tokens=1200):
-    """
-    Groq se pehle try → fast + better human-like output
-    Fail hone pe Hugging Face fallback
-    """
-    if GROQ_CLIENT:
-        try:
-            chat_completion = GROQ_CLIENT.chat.completions.create(
-                messages=[{"role": "user", "content": prompt}],
-                model=model,                  # Best models: llama-3.1-70b-versatile, mixtral-8x7b-32768, gemma2-9b-it
-                temperature=temperature,      # 0.7-0.9 = good randomness/human feel
-                max_tokens=max_tokens,
-                top_p=0.9,
-            )
-            return chat_completion.choices[0].message.content.strip()
-        except Exception as e:
-            st.warning(f"Groq failed: {e}. Falling back to HF.")
+st.title("📄 Simple Resume Builder (Test Version)")
+
+st.markdown("**Yeh minimal version hai – agar yeh title aur inputs dikhte hain to baqi code mein masla tha.**")
+
+# Sidebar for info
+with st.sidebar:
+    st.header("Status")
+    st.info("No API calls in this version → no crash")
+    st.write("Streamlit version check:", st.__version__)
+
+# Main inputs
+col1, col2 = st.columns([1, 1.5])
+
+with col1:
+    st.subheader("Your Details")
+    name = st.text_input("Full Name", "Awais Khan")
+    job = st.text_input("Job Title", "AI Enthusiast / Developer")
+    email = st.text_input("Email", "awais@example.com")
+    phone = st.text_input("Phone", "+92-300-1234567")
+    location = st.text_input("Location", "Islamabad, Pakistan")
+
+    summary = st.text_area("About Me", "Passionate about building tools...", height=120)
+    education = st.text_area("Education", "BS Computer Science - Some University, 2020-2024", height=100)
+    experience = st.text_area("Experience", "Freelance AI projects...", height=150)
+    skills = st.text_area("Skills", "Python, Streamlit, Groq, HuggingFace", height=100)
+
+    if st.button("Generate Preview"):
+        st.success("Preview generating...")
+
+with col2:
+    st.subheader("Resume Preview")
+    st.markdown(f"## {name.upper()}")
+    st.markdown(f"**{job}**")
+    st.markdown(f"{phone} | {email} | {location}")
     
-    # Hugging Face fallback (old logic)
-    if not HF_TOKEN:
-        return "Error: No API tokens available."
+    st.markdown("### ABOUT ME")
+    st.write(summary)
     
-    try:
-        payload = {"inputs": prompt, "parameters": {"temperature": temperature, "max_new_tokens": max_tokens}}
-        response = requests.post(HF_API_URL, headers={"Authorization": f"Bearer {HF_TOKEN}"}, json=payload)
-        res = response.json()
-        if isinstance(res, list) and res:
-            out = res[0].get('generated_text', '')
-            # Clean prompt echo
-            if prompt in out:
-                out = out.split(prompt)[-1].strip()
-            return re.sub(r'<.*?>|\[.*?\]', '', out)
-        return ""
-    except Exception as e:
-        st.error(f"HF fallback also failed: {e}")
-        return ""
-
-# Humanize function (same, but ab Groq use karega)
-def humanize_text(text, label):
-    if not text or len(text) < 5:
-        return text
+    st.markdown("### EDUCATION")
+    st.write(education)
     
-    prompt = f"""
-You are a professional resume writer with 10+ years experience.
-Rewrite this resume {label} section to sound 100% like a real human wrote it.
-Use natural language, vary sentence length, add subtle personal tone if appropriate.
-Avoid robotic repetition, lists that are too perfect, over-formal phrasing.
-Keep it concise, professional, ATS-friendly.
-Original text:
-{text}
+    st.markdown("### EXPERIENCE")
+    st.write(experience)
+    
+    st.markdown("### SKILLS")
+    st.write(skills)
 
-Rewritten version (plain text only):
-"""
-    return query_ai(prompt, temperature=0.8)  # Higher temp = more human variation
+# Simple DOCX download (no PDF to avoid fpdf2 issue abhi)
+def create_simple_docx():
+    doc = Document()
+    p = doc.add_paragraph(name.upper())
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run = p.runs[0]
+    run.font.size = Pt(24)
+    run.bold = True
+    
+    doc.add_paragraph(job).alignment = WD_ALIGN_PARAGRAPH.CENTER
+    doc.add_paragraph(f"{phone} | {email} | {location}").alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
+    doc.add_heading("ABOUT ME", level=1)
+    doc.add_paragraph(summary)
+    
+    buf = io.BytesIO()
+    doc.save(buf)
+    buf.seek(0)
+    return buf
 
-# Generate from prompt (use Groq for better quality)
-def generate_from_prompt(user_prompt):
-    gen_prompt = f"""
-User wants a resume based on: "{user_prompt}"
+if st.button("Download Simple DOCX"):
+    docx_file = create_simple_docx()
+    st.download_button(
+        label="📥 Download Resume.docx",
+        data=docx_file,
+        file_name=f"{name}_Resume.docx",
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
 
-Generate a realistic, complete resume in strict JSON format ONLY. No extra text.
-Keys must be exactly:
-{{
-  "name": "Full name (invent realistic if missing)",
-  "job": "Job title",
-  "email": "professional email",
-  "phone": "phone with country code",
-  "loc": "City, Country",
-  "sum": "Professional summary (200-350 words, human-written style)",
-  "edu": "Education section (formatted paragraphs or bullets)",
-  "exp": "Work experience (3-6 realistic entries, detailed achievements)",
-  "skills": "Skills (comma separated or short bullets)"
-}}
-
-Make it sound completely human-written: varied phrasing, some contractions, realistic details.
-Output ONLY valid JSON.
-"""
-    raw = query_ai(gen_prompt, temperature=0.7, max_tokens=1800)
-    try:
-        data = json.loads(raw)
-        # Extra humanization step
-        for k in ['sum', 'exp', 'edu', 'skills']:
-            if k in data:
-                data[k] = humanize_text(data[k], k.replace('_', ' '))
-        return data
-    except:
-        st.error("AI JSON generation failed. Try again or manual input.")
-        return {}
+st.markdown("---")
+st.caption("Agar yeh page poori dikhi (title, inputs, preview) to bata – ab hum Groq/HF wapis add karenge step by step.")
