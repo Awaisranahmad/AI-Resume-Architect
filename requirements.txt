@@ -3,3 +3,4 @@ requests
 Pillow
 python-docx
 fpdf2
+groq                 # <--- Ye add karo
