@@ -3,131 +3,105 @@ import requests
 from PIL import Image
 import base64
 import io
-import time
 
-# --- 1. Hugging Face API Config ---
+# --- 1. API Config ---
 API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.3"
+# Ensure HF_TOKEN is in your Streamlit Secrets
 HF_TOKEN = st.secrets["HF_TOKEN"]
 headers = {"Authorization": f"Bearer {HF_TOKEN}"}
 
 st.set_page_config(page_title="AI Resume Architect Pro", page_icon="📄", layout="wide")
 
-# --- 2. Enhanced CSS (Fixing the layout issues) ---
+# --- 2. CSS (Simplified to avoid rendering bugs) ---
 st.markdown("""
 <style>
     .stApp { background-color: #f4f7f9; }
-    .cv-preview { 
+    .cv-preview-container { 
         background: white; 
-        padding: 50px; 
-        border-radius: 2px; 
-        box-shadow: 0 0 15px rgba(0,0,0,0.1);
-        color: #333;
-        font-family: 'Garamond', serif;
-        max-width: 850px;
+        padding: 40px; 
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-family: 'Times New Roman', serif;
+        color: #000;
         margin: auto;
     }
-    .cv-header { border-bottom: 3px solid #1e3a8a; padding-bottom: 10px; margin-bottom: 20px; }
-    .cv-name { font-size: 32px; color: #1e3a8a; font-weight: bold; margin: 0; }
-    .cv-contact { font-size: 14px; color: #555; margin: 5px 0; }
-    .section-title { 
-        font-size: 18px; 
-        color: #1e3a8a; 
-        font-weight: bold; 
-        text-transform: uppercase; 
-        margin-top: 25px; 
-        border-bottom: 1px solid #ddd;
-    }
-    .cv-content { font-size: 15px; line-height: 1.5; margin-top: 8px; white-space: pre-wrap; }
-    .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 15px; }
+    .name-header { color: #1e3a8a; font-size: 28px; font-weight: bold; border-bottom: 2px solid #1e3a8a; }
+    .contact-info { font-size: 13px; margin-bottom: 20px; color: #444; }
+    .sec-title { color: #1e3a8a; font-size: 18px; font-weight: bold; margin-top: 15px; text-transform: uppercase; border-bottom: 1px solid #ccc; }
+    .sec-content { font-size: 14px; margin-top: 5px; white-space: pre-line; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 3. Better Humanizer (Mistral Prompt Fix) ---
-def humanize_with_hf(text, section_name):
-    if not text or len(text) < 3: return text
-    
-    # Prompt ko zyada clear kiya hai taake AI dummy text ko bhi handle kare
-    prompt = f"Rewrite this {section_name} for a resume. Make it professional, bulleted, and human-like. Text: {text}"
-    
-    try:
-        response = requests.post(API_URL, headers=headers, json={"inputs": prompt, "parameters": {"max_new_tokens": 300}})
-        output = response.json()
-        
-        if isinstance(output, list):
-            res = output[0].get('generated_text', text)
-            # Sirf AI ka likha hua part nikalna
-            return res.split(text)[-1].strip() if text in res else res
-        return text
-    except:
-        return text
-
-def get_base64(file):
+# --- 3. Functions ---
+def get_img_64(file):
     if file:
         img = Image.open(file)
-        img.thumbnail((150, 150))
+        img.thumbnail((120, 120))
         buf = io.BytesIO()
         img.save(buf, format="PNG")
         return base64.b64encode(buf.getvalue()).decode()
     return None
 
-# --- 4. Sidebar/Form UI ---
-st.markdown("<h1 style='text-align:center; color:#1e3a8a;'>🛡️ AI Resume Architect</h1>", unsafe_allow_html=True)
+def ai_humanizer(text, label):
+    if not text or len(text) < 5: return text
+    try:
+        prompt = f"Professional resume {label}: {text}"
+        response = requests.post(API_URL, headers=headers, json={"inputs": prompt})
+        res_json = response.json()
+        if isinstance(res_json, list):
+            raw_out = res_json[0].get('generated_text', text)
+            return raw_out.split(text)[-1].strip() if text in raw_out else raw_out
+        return text
+    except:
+        return text
 
-col_in, col_out = st.columns([1, 1.2])
+# --- 4. Sidebar Form ---
+st.title("🛡️ AI Resume Architect")
 
-with col_in:
-    st.subheader("🛠️ Build Your Profile")
-    with st.container():
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        name = st.text_input("Full Name", "ANA AWAIS AHMAD")
-        email = st.text_input("Email", "awais@example.com")
-        phone = st.text_input("Phone", "+92 300 1234567")
-        pic = st.file_uploader("Photo (Max 1MB)", type=['jpg','png'])
-        st.markdown("</div>", unsafe_allow_html=True)
+col_left, col_right = st.columns([1, 1.2])
 
-    with st.container():
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        edu = st.text_area("Education", "BS Computer Science, University Name, 2024")
-        exp = st.text_area("Work Experience", "Worked on web projects and database management.")
-        skills = st.text_input("Skills", "Python, SQL, Communication")
-        st.markdown("</div>", unsafe_allow_html=True)
+with col_left:
+    with st.expander("👤 Personal Details", expanded=True):
+        u_name = st.text_input("Name", "ANA AWAIS AHMAD")
+        u_email = st.text_input("Email", "awais@example.com")
+        u_phone = st.text_input("Phone", "+92 300 1234567")
+        u_pic = st.file_uploader("Photo", type=['png', 'jpg'])
+    
+    with st.expander("📝 Content", expanded=True):
+        u_edu = st.text_area("Education", "BS Computer Science, 2024")
+        u_exp = st.text_area("Experience", "Describe your work here...")
+        u_skills = st.text_input("Skills", "Python, SQL, React")
 
-    gen = st.button("🚀 GENERATE PROFESSIONAL CV", use_container_width=True)
+    btn = st.button("🚀 GENERATE RESUME", use_container_width=True)
 
-# --- 5. CV Generation Logic ---
-with col_out:
-    if gen:
-        with st.spinner("Processing Professional Layout..."):
-            img_code = get_base64(pic)
-            # Section-wise humanizing
-            h_exp = humanize_with_hf(exp, "Work Experience")
-            h_edu = humanize_with_hf(edu, "Education")
-
+# --- 5. Output Preview (The Fix) ---
+with col_right:
+    if btn:
+        with st.spinner("Rendering..."):
+            img_b64 = get_img_64(u_pic)
+            
+            # Simple AI Call
+            final_exp = ai_humanizer(u_exp, "experience")
+            
+            # Using a single clean HTML Block
             cv_html = f"""
-            <div class="cv-preview">
-                <div class="cv-header">
-                    <table style="width:100%;">
-                        <tr>
-                            <td>
-                                <div class="cv-name">{name.upper()}</div>
-                                <div class="cv-contact">📧 {email} | 📞 {phone}</div>
-                            </td>
-                            <td style="text-align:right;">
-                                {f'<img src="data:image/png;base64,{img_code}" style="width:100px; height:100px; border-radius:5px; border:1px solid #ddd;">' if img_code else ""}
-                            </td>
-                        </tr>
-                    </table>
-                </div>
-
-                <div class="section-title">Education</div>
-                <div class="cv-content">{h_edu}</div>
-
-                {f'<div class="section-title">Professional Experience</div><div class="cv-content">{h_exp}</div>' if exp else ""}
+            <div class="cv-preview-container">
+                <div class="name-header">{u_name.upper()}</div>
+                <div class="contact-info">📧 {u_email} | 📞 {u_phone}</div>
                 
-                {f'<div class="section-title">Technical Skills</div><div class="cv-content">{skills}</div>' if skills else ""}
+                {"<img src='data:image/png;base64," + img_b64 + "' style='float:right; width:80px; margin-top:-60px; border-radius:5px;'>" if img_b64 else ""}
+                
+                <div class="sec-title">Education</div>
+                <div class="sec-content">{u_edu}</div>
+                
+                <div class="sec-title">Professional Experience</div>
+                <div class="sec-content">{final_exp}</div>
+                
+                <div class="sec-title">Technical Skills</div>
+                <div class="sec-content">{u_skills}</div>
             </div>
             """
             st.markdown(cv_html, unsafe_allow_html=True)
-            st.success("✅ Ready! Use 'Print' (Ctrl+P) to save as PDF.")
+            st.success("Print (Ctrl+P) to save as PDF")
     else:
-        st.info("Preview will appear here.")
+        st.info("Preview will show here.")
