@@ -4,7 +4,7 @@ from PIL import Image
 import io
 import re
 from docx import Document
-from docx.shared import Pt, Inches, RGBColor
+from docx.shared import Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 # --- 1. API Config ---
@@ -14,136 +14,123 @@ headers = {"Authorization": f"Bearer {HF_TOKEN}"}
 
 st.set_page_config(page_title="Professional Resume Architect", layout="wide")
 
-# --- 2. Professional CSS for Preview ---
+# --- 2. CSS (Clean & Minimalist) ---
 st.markdown("""
 <style>
-    .stApp { background-color: #ffffff; }
-    .cv-body { 
-        padding: 40px; color: #000; font-family: 'Helvetica', sans-serif;
+    .stApp { background-color: white; }
+    .cv-preview { 
+        padding: 40px; color: black; font-family: 'Arial', sans-serif;
         max-width: 800px; margin: auto; border: 1px solid #eee;
     }
-    .cv-name { font-size: 32px; font-weight: bold; text-align: center; text-transform: uppercase; margin-bottom: 5px; }
-    .cv-title { font-size: 18px; text-align: center; color: #444; margin-bottom: 15px; }
-    .cv-contact { font-size: 12px; text-align: center; border-bottom: 1px solid #000; padding-bottom: 15px; margin-bottom: 20px; }
-    .sec-h { font-size: 16px; font-weight: bold; text-transform: uppercase; margin-top: 20px; border-bottom: 1px solid #ccc; padding-bottom: 2px; }
-    .sec-content { font-size: 13px; margin-top: 8px; line-height: 1.4; white-space: pre-line; text-align: justify; }
+    .name-h { font-size: 32px; font-weight: bold; text-align: center; margin-bottom: 5px; }
+    .title-h { font-size: 18px; text-align: center; color: #555; margin-bottom: 10px; }
+    .contact-h { font-size: 13px; text-align: center; border-bottom: 1px solid black; padding-bottom: 15px; margin-bottom: 20px; }
+    .sec-h { font-size: 16px; font-weight: bold; text-transform: uppercase; margin-top: 20px; border-bottom: 1px solid #ccc; }
+    .content-p { font-size: 14px; margin-top: 8px; white-space: pre-wrap; text-align: justify; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 3. Robust Humanizer & Word Export ---
-def ai_humanizer(text, label):
+# --- 3. Better Cleaning Logic ---
+def clean_ai_output(raw_result, original_input):
+    # AI agar prompt repeat kare to usay remove karo
+    clean = raw_result.replace(original_input, "")
+    # Har kism ke HTML tags ko remove karo
+    clean = re.sub('<[^<]+?>', '', clean)
+    # Markdown code blocks (```) ko remove karo
+    clean = clean.replace("```html", "").replace("```", "").strip()
+    return clean
+
+def ai_call(text, category):
     if not text or len(text) < 5: return text
     try:
-        # Prompt ko strict rakha hai taake koi tags na aayein
-        prompt = f"Rewrite this resume {label} to be professional and humanized. Use clear sentences. No intro, no HTML tags. Content: {text}"
-        response = requests.post(API_URL, headers=headers, json={"inputs": prompt, "parameters": {"max_new_tokens": 250}})
+        prompt = f"Rewrite this resume {category} professionally. No intro, no tags: {text}"
+        response = requests.post(API_URL, headers=headers, json={"inputs": prompt})
         res = response.json()
-        out = res[0]['generated_text'] if isinstance(res, list) else text
-        # Cleanup: AI ka repeat kiya hua prompt hatana
-        final = out.split(text)[-1].strip() if text in out else out
-        return re.sub('<[^<]+?>', '', final) # Extra safety for HTML tags
+        if isinstance(res, list):
+            full_out = res[0].get('generated_text', text)
+            return clean_ai_output(full_out, prompt)
+        return text
     except:
         return text
 
-def create_professional_docx(data):
+# --- 4. Word Export ---
+def make_docx(d):
     doc = Document()
-    
-    # Name & Job Title
-    name_p = doc.add_paragraph()
-    name_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = name_p.add_run(data['name'].upper())
-    run.font.size = Pt(24)
+    n = doc.add_paragraph()
+    n.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run = n.add_run(d['name'].upper())
+    run.font.size = Pt(22)
     run.bold = True
     
-    title_p = doc.add_paragraph()
-    title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run_t = title_p.add_run(data['job_title'])
-    run_t.font.size = Pt(14)
+    t = doc.add_paragraph()
+    t.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    t.add_run(d['job'])
     
-    # Contact Info
-    contact = doc.add_paragraph()
-    contact.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    contact.add_run(f"📞 {data['phone']}  |  📧 {data['email']}  |  📍 {data['location']}")
+    c = doc.add_paragraph()
+    c.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    c.add_run(f"{d['phone']} | {d['email']} | {d['loc']}")
     
-    # Sections Helper
-    def add_section(title, content):
-        h = doc.add_heading(title.upper(), level=1)
-        doc.add_paragraph(content)
+    for sec in [('About Me', d['sum']), ('Education', d['edu']), ('Experience', d['exp']), ('Skills', d['skills'])]:
+        doc.add_heading(sec[0].upper(), level=1)
+        doc.add_paragraph(sec[1])
+        
+    buf = io.BytesIO()
+    doc.save(buf)
+    buf.seek(0)
+    return buf
 
-    add_section("About Me", data['summary'])
-    add_section("Education", data['edu'])
-    add_section("Work Experience", data['exp'])
-    add_section("Skills", data['skills'])
+# --- 5. Main UI ---
+st.title("📄 Resume Architect (Sebastian Style)")
 
-    target = io.BytesIO()
-    doc.save(target)
-    target.seek(0)
-    return target
+c1, c2 = st.columns([1, 1.2])
 
-# --- 4. Sidebar Input ---
-st.title("📄 Professional Resume Builder")
-
-col1, col2 = st.columns([1, 1.2])
-
-with col1:
-    with st.expander("👤 Header Information", expanded=True):
-        u_name = st.text_input("Full Name", "Sebastian Bennett")
-        u_job = st.text_input("Professional Title", "Professional Accountant")
-        u_email = st.text_input("Email", "hello@reallygreatsite.com")
+with c1:
+    with st.expander("👤 Personal Details", expanded=True):
+        u_name = st.text_input("Name", "Sebastian Bennett")
+        u_job = st.text_input("Title", "Professional Accountant")
+        u_email = st.text_input("Email", "hello@site.com")
         u_phone = st.text_input("Phone", "+123-456-7890")
-        u_loc = st.text_input("Location", "123 Anywhere St., Any City")
+        u_loc = st.text_input("Location", "Any City, USA")
     
-    with st.expander("📝 Resume Content", expanded=True):
-        u_sum = st.text_area("About Me (Summary)", "Highly motivated professional with experience in...")
-        u_edu = st.text_area("Education", "Borcelle University | 2026-2030")
-        u_exp = st.text_area("Work Experience", "Senior Accountant at Salford & Co.")
-        u_skills = st.text_area("Skills", "Auditing, Financial Reporting, SQL")
+    with st.expander("📝 Content", expanded=True):
+        u_sum = st.text_area("About Me", "I am a motivated accountant...")
+        u_edu = st.text_area("Education", "University Name | 2026")
+        u_exp = st.text_area("Experience", "Senior Accountant at Salford & Co.")
+        u_skills = st.text_area("Skills", "Auditing, Tax, SQL")
 
-    generate = st.button("🚀 GENERATE HUMANIZED RESUME")
+    gen = st.button("🚀 BUILD PROFESSIONAL CV")
 
-# --- 5. Professional Preview & Download ---
-with col2:
-    if generate:
-        with st.spinner("Humanizing your career story..."):
-            # AI Processing
-            h_sum = ai_humanizer(u_sum, "summary")
-            h_exp = ai_humanizer(u_exp, "experience")
+with c2:
+    if gen:
+        with st.spinner("Humanizing..."):
+            # Process content separately to avoid mixing tags
+            h_sum = ai_call(u_sum, "summary")
+            h_exp = ai_call(u_exp, "experience")
             
             # Web Preview
             st.markdown(f"""
-            <div class="cv-body">
-                <div class="cv-name">{u_name}</div>
-                <div class="cv-title">{u_job}</div>
-                <div class="cv-contact">📞 {u_phone}  |  📧 {u_email}  |  📍 {u_loc}</div>
+            <div class="cv-preview">
+                <div class="name-h">{u_name.upper()}</div>
+                <div class="title-h">{u_job}</div>
+                <div class="contact-h">📞 {u_phone} | 📧 {u_email} | 📍 {u_loc}</div>
                 
                 <div class="sec-h">About Me</div>
-                <div class="sec-content">{h_sum}</div>
+                <div class="content-p">{h_sum}</div>
                 
                 <div class="sec-h">Education</div>
-                <div class="sec-content">{u_edu}</div>
+                <div class="content-p">{u_edu}</div>
                 
                 <div class="sec-h">Work Experience</div>
-                <div class="sec-content">{h_exp}</div>
+                <div class="content-p">{h_exp}</div>
                 
                 <div class="sec-h">Skills</div>
-                <div class="sec-content">{u_skills}</div>
+                <div class="content-p">{u_skills}</div>
             </div>
             """, unsafe_allow_html=True)
             
-            # Word File
-            cv_data = {
-                'name': u_name, 'job_title': u_job, 'email': u_email, 
-                'phone': u_phone, 'location': u_loc, 'summary': h_sum,
-                'edu': u_edu, 'exp': h_exp, 'skills': u_skills
-            }
-            docx_file = create_professional_docx(cv_data)
-            
-            st.download_button(
-                label="📥 DOWNLOAD PROFESSIONAL WORD FILE",
-                data=docx_file,
-                file_name=f"{u_name}_Resume.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                use_container_width=True
-            )
+            # Download Word
+            data = {'name':u_name, 'job':u_job, 'email':u_email, 'phone':u_phone, 'loc':u_loc, 'sum':h_sum, 'edu':u_edu, 'exp':h_exp, 'skills':u_skills}
+            word_file = make_docx(data)
+            st.download_button("📥 DOWNLOAD AS WORD (.DOCX)", data=word_file, file_name=f"{u_name}_CV.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
     else:
-        st.info("Fill the details and click Generate to see the professional layout.")
+        st.info("Preview yahan nazar aaye ga.")
